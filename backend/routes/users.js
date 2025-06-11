@@ -60,8 +60,8 @@ router.put("/:id", async (req, res) => {
 // Deactivate user
 router.put("/:id/deactivate", async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true }).select("-password")
-
+    // const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true }).select("-password")
+    const user = await User.findByIdAndDelete(req.params.id);
     if (!user) {
       return res.status(404).json({ message: "User not found" })
     }
@@ -74,19 +74,19 @@ router.put("/:id/deactivate", async (req, res) => {
 })
 
 // Activate user
-router.put("/:id/activate", async (req, res) => {
-  try {
-    const user = await User.findByIdAndUpdate(req.params.id, { isActive: true }, { new: true }).select("-password")
+// router.put("/:id/activate", async (req, res) => {
+//   try {
+//     const user = await User.findByIdAndUpdate(req.params.id, { isActive: true }, { new: true }).select("-password")
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" })
-    }
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" })
+//     }
 
-    res.json({ message: "User activated successfully", user })
-  } catch (error) {
-    console.error("Activate user error:", error)
-    res.status(500).json({ message: "Server error" })
-  }
-})
+//     res.json({ message: "User activated successfully", user })
+//   } catch (error) {
+//     console.error("Activate user error:", error)
+//     res.status(500).json({ message: "Server error" })
+//   }
+// })
 
 module.exports = router

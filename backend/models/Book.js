@@ -25,12 +25,12 @@ const bookSchema = new mongoose.Schema(
     },
     publisher: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     publishedYear: {
       type: Number,
-      required: true,
+      // required: true,
     },
     totalCopies: {
       type: Number,
@@ -52,7 +52,7 @@ const bookSchema = new mongoose.Schema(
     },
     location: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     isActive: {

@@ -5,6 +5,8 @@ export const api = axios.create({
   baseURL: 'http://localhost:5000',
 });
 
+const API_URL= 'http://localhost:5000'
+
 // TODO: Uncomment when backend is ready
 // Auth endpoints
 /*
@@ -425,6 +427,24 @@ export const payFine = async (amount: number) => {
 // Books management APIs
 export const fetchBooks = async () => {
   try {
+    // const response = await fetch(`${API_URL}/api/users`)
+
+    // if (!response.ok) {
+    //   throw new Error(`HTTP error! status: ${response.status}`)
+    // }
+
+    // const data = await response.json()
+    // setUsers(data)
+    // setFilteredUsers(data)
+
+    // return data.books;
+    // console.log(data.books);
+    // return data.books.map(
+    //     book => ({
+    //     ...book,
+    //     available: book.availableCopies > 0
+    //   })
+    // )
     return booksInventory.map(book => ({
       ...book,
       available: book.availableQuantity > 0

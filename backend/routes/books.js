@@ -69,6 +69,8 @@ router.post("/", async (req, res) => {
     const bookData = req.body
     bookData.availableCopies = bookData.totalCopies
 
+    console.log(bookData)
+
     const book = new Book(bookData)
     await book.save()
 

@@ -3,9 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import MainLayout from "@/components/MainLayout"
-import { fetchUsers, updateUserProfile, createUser, toggleUserActiveStatus } from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,9 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { Edit, User, Plus, UserX, UserCheck } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Edit, UserIcon, Search, UserX } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+
+const API_URL = "http://localhost:5000"
 
 type CurrentUserData = {
   _id: string
@@ -28,45 +28,33 @@ type CurrentUserData = {
   isActive: boolean
 }
 
+type UserData = {
+  _id: string
+  name: string
+  email: string
+  role: "student" | "faculty" | "librarian" | "admin" | "guest"
+  department: string
+  createdAt: string
+  studentId?: string
+  isActive: boolean
+  inactiveRemark?: string
+}
+
 const UserManagement = () => {
   const [currentUser, setCurrentUser] = useState<CurrentUserData | null>(null)
   const [userLoading, setUserLoading] = useState(true)
-  const [editingUser, setEditingUser] = useState<{
-    id: string
-    name: string
-    email: string
-    role: "student" | "faculty" | "librarian" | "admin" | "guest"
-    department: string
-    memberSince: string
-    studentId?: string
-    isActive: boolean
-    inactiveRemark?: string
-  } | null>(null)
+  const [users, setUsers] = useState<UserData[]>([])
+  const [filteredUsers, setFilteredUsers] = useState<UserData[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [roleFilter, setRoleFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+
+  const [editingUser, setEditingUser] = useState<UserData | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<{
-    id: string
-    name: string
-    email: string
-    role: "student" | "faculty" | "librarian" | "admin" | "guest"
-    department: string
-    memberSince: string
-    studentId?: string
-    isActive: boolean
-    inactiveRemark?: string
-  } | null>(null)
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
   const [statusRemark, setStatusRemark] = useState("")
-
-  const [newUser, setNewUser] = useState({
-    name: "",
-    email: "",
-    role: "student" as "student" | "faculty" | "librarian" | "admin" | "guest",
-    department: "",
-    studentId: "",
-  })
-
-  const queryClient = useQueryClient()
 
   // Load current user from localStorage
   useEffect(() => {
@@ -83,144 +71,139 @@ const UserManagement = () => {
     setUserLoading(false)
   }, [])
 
-  const { data: users = [], isLoading } = useQuery({
-    queryKey: ["users", currentUser?.role],
-    queryFn: () => fetchUsers(currentUser?.role),
-    enabled: !!currentUser, // Only fetch when currentUser is available
-  })
+  // Fetch all users
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch(`${API_URL}/api/users`)
 
-  const updateUserMutation = useMutation({
-    mutationFn: ({
-      userId,
-      userData,
-    }: {
-      userId: string
-      userData: Partial<{
-        id: string
-        name: string
-        email: string
-        role: "student" | "faculty" | "librarian" | "admin" | "guest"
-        department: string
-        memberSince: string
-        studentId?: string
-        isActive: boolean
-        inactiveRemark?: string
-      }>
-    }) => updateUserProfile(userId, userData),
-    onSuccess: () => {
-      toast.success("User profile updated successfully!")
-      queryClient.invalidateQueries({ queryKey: ["users"] })
-      setEditingUser(null)
-      setIsEditDialogOpen(false)
-    },
-    onError: () => {
-      toast.error("Failed to update user profile. Please try again.")
-    },
-  })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
 
-  const createUserMutation = useMutation({
-    mutationFn: createUser,
-    onSuccess: () => {
-      toast.success("User created successfully!")
-      queryClient.invalidateQueries({ queryKey: ["users"] })
-      setNewUser({ name: "", email: "", role: "student", department: "", studentId: "" })
-      setIsCreateDialogOpen(false)
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to create user. Please try again.")
-    },
-  })
+      const data = await response.json()
+      setUsers(data)
+      setFilteredUsers(data)
+    } catch (error) {
+      console.error("Error fetching users:", error)
+      toast.error("Failed to fetch users")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-  const toggleStatusMutation = useMutation({
-    mutationFn: ({ userId, isActive, remark }: { userId: string; isActive: boolean; remark?: string }) =>
-      toggleUserActiveStatus(userId, isActive, remark),
-    onSuccess: () => {
-      toast.success("User status updated successfully!")
-      queryClient.invalidateQueries({ queryKey: ["users"] })
-      setIsStatusDialogOpen(false)
-      setSelectedUser(null)
-      setStatusRemark("")
-    },
-    onError: () => {
-      toast.error("Failed to update user status. Please try again.")
-    },
-  })
+  // Filter users based on search query and filters
+  useEffect(() => {
+    let filtered = [...users]
 
-  const handleUpdateUser = (e: React.FormEvent) => {
+    // Apply search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(
+        (user) =>
+          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (user.studentId && user.studentId.toLowerCase().includes(searchQuery.toLowerCase())),
+      )
+    }
+
+    // Apply role filter
+    if (roleFilter !== "all") {
+      filtered = filtered.filter((user) => user.role === roleFilter)
+    }
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((user) => (statusFilter === "active" ? user.isActive : !user.isActive))
+    }
+
+    setFilteredUsers(filtered)
+  }, [users, searchQuery, roleFilter, statusFilter])
+
+  // Fetch users when component mounts and currentUser is available
+  useEffect(() => {
+    if (currentUser) {
+      fetchUsers()
+    }
+  }, [currentUser])
+
+  // Update user
+  const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingUser) return
 
-    updateUserMutation.mutate({
-      userId: editingUser.id,
-      userData: editingUser,
-    })
-  }
+    try {
+      const response = await fetch(`${API_URL}/api/users/${editingUser._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: editingUser.name,
+          email: editingUser.email,
+          department: editingUser.department,
+          studentId: editingUser.studentId,
+          role: editingUser.role,
+        }),
+      })
 
-  const handleCreateUser = (e: React.FormEvent) => {
-    e.preventDefault()
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
 
-    // Validate that the current user can create this role
-    if (!canCreateRole(newUser.role)) {
-      toast.error("You don't have permission to create users with this role")
-      return
+      toast.success("User profile updated successfully!")
+      fetchUsers() // Refresh the users list
+      setEditingUser(null)
+      setIsEditDialogOpen(false)
+    } catch (error) {
+      console.error("Error updating user:", error)
+      toast.error("Failed to update user profile. Please try again.")
     }
-
-    // Type assertion to match the API expectation
-    const roleForAPI = newUser.role as "student" | "faculty" | "guest"
-
-    createUserMutation.mutate({
-      name: newUser.name,
-      email: newUser.email,
-      role: roleForAPI,
-      department: newUser.department,
-      studentId: newUser.role === "student" ? newUser.studentId : undefined,
-    })
   }
 
-  const openEditDialog = (user: {
-    id: string
-    name: string
-    email: string
-    role: "student" | "faculty" | "librarian" | "admin" | "guest"
-    department: string
-    memberSince: string
-    studentId?: string
-    isActive: boolean
-    inactiveRemark?: string
-  }) => {
-    setEditingUser({ ...user })
-    setIsEditDialogOpen(true)
-  }
-
-  const openStatusDialog = (user: {
-    id: string
-    name: string
-    email: string
-    role: "student" | "faculty" | "librarian" | "admin" | "guest"
-    department: string
-    memberSince: string
-    studentId?: string
-    isActive: boolean
-    inactiveRemark?: string
-  }) => {
-    setSelectedUser(user)
-    setStatusRemark("")
-    setIsStatusDialogOpen(true)
-  }
-
-  const handleToggleStatus = (isActive: boolean) => {
+  // Deactivate user
+  const handleDeactivateUser = async () => {
     if (!selectedUser) return
 
-    if (!isActive && !statusRemark.trim()) {
+    if (!statusRemark.trim()) {
       toast.error("Please provide a reason for deactivating the user")
       return
     }
 
-    toggleStatusMutation.mutate({
-      userId: selectedUser.id,
-      isActive,
-      remark: !isActive ? statusRemark : undefined,
-    })
+    try {
+      const response = await fetch(`${API_URL}/api/users/${selectedUser._id}/deactivate`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          remark: statusRemark,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      toast.success("User deactivated successfully!")
+      fetchUsers() // Refresh the users list
+      setIsStatusDialogOpen(false)
+      setSelectedUser(null)
+      setStatusRemark("")
+    } catch (error) {
+      console.error("Error deactivating user:", error)
+      toast.error("Failed to deactivate user. Please try again.")
+    }
+  }
+
+  const openEditDialog = (user: UserData) => {
+    setEditingUser({ ...user })
+    setIsEditDialogOpen(true)
+  }
+
+  const openStatusDialog = (user: UserData) => {
+    setSelectedUser(user)
+    setStatusRemark("")
+    setIsStatusDialogOpen(true)
   }
 
   const getRoleBadgeColor = (role: string) => {
@@ -240,16 +223,8 @@ const UserManagement = () => {
     }
   }
 
-  const canCreateRole = (role: string) => {
-    if (currentUser?.role === "admin") {
-      // Admins can create all roles except other admins (for security)
-      return ["student", "faculty", "librarian", "guest"].includes(role)
-    }
-    if (currentUser?.role === "librarian") {
-      // Librarians can only create these roles
-      return ["student", "faculty", "guest"].includes(role)
-    }
-    return false
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString()
   }
 
   // Show loading while user data is being loaded
@@ -278,74 +253,104 @@ const UserManagement = () => {
     )
   }
 
-  // Show loading while users are being fetched
-  if (isLoading) {
-    return (
-      <MainLayout>
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-center h-64">
-            <p>Loading users...</p>
-          </div>
-        </div>
-      </MainLayout>
-    )
-  }
-
   return (
     <MainLayout>
       <div className="container mx-auto px-4 py-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">User Management</h1>
-          <div className="flex items-center gap-4">
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create User
-                </Button>
-              </DialogTrigger>
-            </Dialog>
-            <div className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              <span className="text-sm text-gray-600">
-                {currentUser?.role === "admin" ? "All Users" : "Students & Guests"}
-              </span>
-            </div>
+          <div className="flex items-center gap-2">
+            <UserIcon className="h-5 w-5" />
+            <span className="text-sm text-gray-600">
+              {currentUser?.role === "admin" ? "All Users" : "Students & Guests"}
+            </span>
           </div>
         </div>
 
-        <Card>
+        {/* Search and Filter Section */}
+        <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Users List</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Search & Filter Users
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Student ID</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Member Since</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map(
-                  (user: {
-                    id: string
-                    name: string
-                    email: string
-                    role: "student" | "faculty" | "librarian" | "admin" | "guest"
-                    department: string
-                    memberSince: string
-                    studentId?: string
-                    isActive: boolean
-                    inactiveRemark?: string
-                  }) => (
-                    <TableRow key={user.id}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="search">Search Users</Label>
+                <Input
+                  id="search"
+                  placeholder="Search by name, email, or student ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="roleFilter">Filter by Role</Label>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="student">Student</SelectItem>
+                    <SelectItem value="faculty">Faculty</SelectItem>
+                    <SelectItem value="librarian">Librarian</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="guest">Guest</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="statusFilter">Filter by Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Users List ({filteredUsers.length} {filteredUsers.length === 1 ? "user" : "users"} found)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <p>Loading users...</p>
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="text-center py-8">
+                <UserIcon className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-500">No users found matching your criteria.</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Student ID</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Member Since</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.map((user) => (
+                    <TableRow key={user._id}>
                       <TableCell className="font-medium">{user.name}</TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
@@ -367,101 +372,26 @@ const UserManagement = () => {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{user.memberSince}</TableCell>
+                      <TableCell>{formatDate(user.createdAt)}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button variant="ghost" size="sm" onClick={() => openEditDialog(user)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => openStatusDialog(user)}>
-                            {user.isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-                          </Button>
+                          {user.isActive && (
+                            <Button variant="ghost" size="sm" onClick={() => openStatusDialog(user)}>
+                              <UserX className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
-                  ),
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
-
-        {/* Create User Dialog */}
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create New User</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateUser} className="space-y-4">
-              <div>
-                <Label htmlFor="createName">Name</Label>
-                <Input
-                  id="createName"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser((prev) => ({ ...prev, name: e.target.value }))}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="createEmail">Email</Label>
-                <Input
-                  id="createEmail"
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="createRole">Role</Label>
-                <Select
-                  value={newUser.role}
-                  onValueChange={(value) =>
-                    setNewUser((prev) => ({
-                      ...prev,
-                      role: value as "student" | "faculty" | "librarian" | "admin" | "guest",
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {canCreateRole("student") && <SelectItem value="student">Student</SelectItem>}
-                    {canCreateRole("faculty") && <SelectItem value="faculty">Faculty</SelectItem>}
-                    {canCreateRole("guest") && <SelectItem value="guest">Guest</SelectItem>}
-                    {currentUser?.role === "admin" && canCreateRole("librarian") && (
-                      <SelectItem value="librarian">Librarian</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="createDepartment">Department</Label>
-                <Input
-                  id="createDepartment"
-                  value={newUser.department}
-                  onChange={(e) => setNewUser((prev) => ({ ...prev, department: e.target.value }))}
-                  required
-                />
-              </div>
-              {newUser.role === "student" && (
-                <div>
-                  <Label htmlFor="createStudentId">Student ID</Label>
-                  <Input
-                    id="createStudentId"
-                    value={newUser.studentId}
-                    onChange={(e) => setNewUser((prev) => ({ ...prev, studentId: e.target.value }))}
-                    placeholder="Enter student ID"
-                  />
-                </div>
-              )}
-              <Button type="submit" className="w-full" disabled={createUserMutation.isPending}>
-                {createUserMutation.isPending ? "Creating..." : "Create User"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
 
         {/* Edit User Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -536,60 +466,41 @@ const UserManagement = () => {
                     </Select>
                   </div>
                 )}
-                <Button type="submit" className="w-full" disabled={updateUserMutation.isPending}>
-                  {updateUserMutation.isPending ? "Updating..." : "Update User"}
+                <Button type="submit" className="w-full">
+                  Update User
                 </Button>
               </form>
             )}
           </DialogContent>
         </Dialog>
 
-        {/* Status Toggle Dialog */}
+        {/* Deactivate User Dialog */}
         <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>{selectedUser?.isActive ? "Deactivate User" : "Activate User"}</DialogTitle>
+              <DialogTitle>Deactivate User</DialogTitle>
             </DialogHeader>
             {selectedUser && (
               <div className="space-y-4">
                 <p>
-                  Are you sure you want to {selectedUser.isActive ? "deactivate" : "activate"} {selectedUser.name}?
+                  Are you sure you want to deactivate <strong>{selectedUser.name}</strong>?
                 </p>
-                {selectedUser.isActive && (
-                  <div>
-                    <Label htmlFor="statusRemark">Reason for deactivation</Label>
-                    <Textarea
-                      id="statusRemark"
-                      value={statusRemark}
-                      onChange={(e) => setStatusRemark(e.target.value)}
-                      placeholder="Enter reason for deactivating this user..."
-                      required
-                    />
-                  </div>
-                )}
-                {!selectedUser.isActive && selectedUser.inactiveRemark && (
-                  <div>
-                    <Label>Previous deactivation reason:</Label>
-                    <p className="text-sm text-gray-600 p-2 bg-gray-50 rounded">{selectedUser.inactiveRemark}</p>
-                  </div>
-                )}
+                <div>
+                  <Label htmlFor="statusRemark">Reason for deactivation *</Label>
+                  <Textarea
+                    id="statusRemark"
+                    value={statusRemark}
+                    onChange={(e) => setStatusRemark(e.target.value)}
+                    placeholder="Enter reason for deactivating this user..."
+                    required
+                  />
+                </div>
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1" onClick={() => setIsStatusDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button
-                    variant={selectedUser.isActive ? "destructive" : "default"}
-                    className="flex-1"
-                    onClick={() => handleToggleStatus(!selectedUser.isActive)}
-                    disabled={toggleStatusMutation.isPending}
-                  >
-                    {toggleStatusMutation.isPending
-                      ? selectedUser.isActive
-                        ? "Deactivating..."
-                        : "Activating..."
-                      : selectedUser.isActive
-                        ? "Deactivate"
-                        : "Activate"}
+                  <Button variant="destructive" className="flex-1" onClick={handleDeactivateUser}>
+                    Deactivate User
                   </Button>
                 </div>
               </div>

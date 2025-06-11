@@ -1,7 +1,7 @@
 
-import { userData } from "@/lib/data";
+// import { userData } from "@/lib/data";
 
-const WelcomeBar = () => {
+const WelcomeBar = ({UserName, UserRole}) => {
   // Get current time of day
   const getCurrentTimeGreeting = () => {
     const hour = new Date().getHours();
@@ -25,7 +25,8 @@ const WelcomeBar = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">
-            {getCurrentTimeGreeting()}, {userData.name}!
+            {/* {getCurrentTimeGreeting()}, {userData.name}! */}
+            {getCurrentTimeGreeting()}, {UserName}!
           </h1>
           <p className="text-gray-600 mt-1">
             {getTodayDate()}
@@ -34,7 +35,8 @@ const WelcomeBar = () => {
         <div className="mt-4 md:mt-0">
           <div className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-50 text-blue-700">
             <span className="mr-1 w-2 h-2 rounded-full bg-blue-500"></span>
-            {userData.role}
+            {/* {userData.role} */}
+            {UserRole}
           </div>
         </div>
       </div>

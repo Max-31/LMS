@@ -61,6 +61,9 @@ const Profile = () => {
   const booksOverdue = books.filter((book) => new Date(book.returnDate) < new Date()).length
   const totalFines = books.reduce((sum, book) => sum + book.fine, 0)
 
+  // Check if user should see library usage stats
+  const shouldShowStats = userData?.role !== "librarian" && userData?.role !== "admin"
+
   // Show loading state while user data is being loaded
   if (userLoading) {
     return (
@@ -146,7 +149,12 @@ const Profile = () => {
             {/* Statistics */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Library Usage</CardTitle>
+                <CardTitle className="text-lg">
+                  {
+                    shouldShowStats? "Library Usage" : ""
+                  }
+                  {/* Library Usage */}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -155,7 +163,7 @@ const Profile = () => {
                     <Skeleton className="h-4 w-full" />
                     <Skeleton className="h-4 w-full" />
                   </div>
-                ) : (
+                ) : shouldShowStats ? (
                   <div className="space-y-4">
                     <div className="flex justify-between">
                       <span className="text-gray-600 dark:text-gray-400">Books Borrowed</span>
@@ -170,6 +178,13 @@ const Profile = () => {
                       <span className="font-semibold">₹{totalFines.toFixed(2)}</span>
                     </div>
                   </div>
+                ) : (
+                  <div></div>
+                  // <div className="text-center py-4">
+                  //   <p className="text-gray-500 text-sm">
+                  //     Library usage statistics are not available for {userData.role} accounts.
+                  //   </p>
+                  // </div>
                 )}
               </CardContent>
             </Card>
